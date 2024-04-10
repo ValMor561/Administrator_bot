@@ -1,0 +1,17 @@
+[Unit]
+Description = News Bot
+After = network.target
+
+[Service]
+Type = simple
+WorkingDirectory = /var/www/News_bot/
+ExecStart = /usr/bin/python3 main.py
+User = root
+Restart = on-failure
+SyslogIdentifier = /var/log/news_forklog.log
+RestartSec = 5
+TimeoutStartSec = infinity
+MemoryLimit=200M
+
+[Install]
+WantedBy = multi-user.target
