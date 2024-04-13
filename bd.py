@@ -11,16 +11,17 @@ class BDRequests():
             host=config.HOST,
             database=config.DATABASE,
             user=config.USER,
-            password=config.PASSWORD
+            password=config.PASSWORD,
+            client_encoding='utf8'
         )
 
     def __del__(self):
         self.connection.close()
 
-    def insert_task(self, date, text):
+    def insert_task(self, date, text, image_id, sticker_id):
         cursor = self.connection.cursor()
-        insert_query = f'INSERT INTO public."{config.TABLENAME}" (date_post, text_post) VALUES (%s, %s);'
-        cursor.execute(insert_query, (date, text))
+        insert_query = f'INSERT INTO public."{config.TABLENAME}" (date_post, text_post, image_id, sticker_id) VALUES (%s, %s, %s, %s);'
+        cursor.execute(insert_query, (date, text, image_id, sticker_id))
         self.connection.commit()
 
     def delete_old(self):

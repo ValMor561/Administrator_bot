@@ -20,11 +20,11 @@ class PyroGRAMM:
     async def get_admins(self, chat_id):
         administrators = "Администраторы: \n"
         async for m in self.app.get_chat_members(int(chat_id), filter=enums.ChatMembersFilter.ADMINISTRATORS):
-            administrators += f"    Admin ID: {m.user.id} Username: {m.user.username}\n"
+            administrators += f"{m.user.id} : {m.user.username}\n"
         return administrators
 
     async def get_bots(self, chat_id):
         administrators = "Список ботов: \n"
         async for m in self.app.get_chat_members(chat_id, filter=enums.ChatMembersFilter.BOTS):
-            administrators += f"    Бот ID: {m.user.id} Username: {m.user.username}\n"
+            administrators += f"{m.user.id} : {m.user.username}\n"
         return administrators

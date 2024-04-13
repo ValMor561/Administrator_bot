@@ -1,14 +1,14 @@
 [Unit]
-Description = News Bot
+Description = Admin Bot
 After = network.target
 
 [Service]
 Type = simple
-WorkingDirectory = /var/www/News_bot/
-ExecStart = /usr/bin/python3 main.py
+WorkingDirectory = /var/www/Admin_bot/
+ExecStart = /usr/bin/python3.8 main.py
 User = root
 Restart = on-failure
-SyslogIdentifier = /var/log/news_forklog.log
+SyslogIdentifier = /var/log/Admin_bot.log
 RestartSec = 5
 TimeoutStartSec = infinity
 MemoryLimit=200M
