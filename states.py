@@ -5,7 +5,8 @@ class SendMessage(StatesGroup):
     image_id = State()
     sticker_id = State()
     when = State()
-    schedule = State()
+    schedule_date = State()
+    schedule_time = State()
 
 class AddAdmin(StatesGroup):
     admins_id = State()

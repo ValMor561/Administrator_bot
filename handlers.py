@@ -13,8 +13,11 @@ import os
 import sys
 from clientbase import PyroGRAMM
 from states import SendMessage, AddAdmin, DeleteAdmin
-from datetime import datetime
+from datetime import datetime, timedelta
 from bd import BDRequests
+from aiogram.filters.callback_data import CallbackData
+from aiogram_calendar import SimpleCalendar, SimpleCalendarCallback
+
 
 bot = Bot(token=config.BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
@@ -69,26 +72,31 @@ async def cmd_start(msg: Message):
     #Добавление кнопок
     builder = ReplyKeyboardBuilder()
     builder.row(types.KeyboardButton(text='/add_admin', callback_data='add_admin'), types.KeyboardButton(text='/delete_admin', callback_data='delete_admin'))
-    builder.row(types.KeyboardButton(text='/list_admins', callback_data='list_admins'), types.KeyboardButton(text='/list_bots', callback_data='list_bots'))
-    builder.row(types.KeyboardButton(text='/subscribers', callback_data='subscribers'), types.KeyboardButton(text='/restart', callback_data='restart'))
+    builder.row(types.KeyboardButton(text='/list_channels', callback_data='list_channels'), types.KeyboardButton(text='/restart', callback_data='restart'))
     builder.row(types.KeyboardButton(text='/post', callback_data='post'))
 
     keyboard = builder.as_markup(resize_keyboard=True)
-    await msg.answer("Бот запущен\nКоманды:\n/add_admin - Добавление админов в каналы\n/delete_admin - Удаление админов из каналов\n/list_admins - Список админов каналов\n/list_bots - Список ботов в каналах\n/subscribers - Количество подписчиков в каналах\n/post - Отправка постов в каналы\n/restart - Перезапуск всего бота\n", reply_markup=keyboard)
+    await msg.answer("Бот запущен\nКоманды:\n/add_admin - Добавление админов в каналы\n/delete_admin - Удаление админов из каналов\n/list_channels - Информация о каналах\n/post - Отправка постов в каналы\n/restart - Перезапуск всего бота\n", reply_markup=keyboard)
 
 
 async def get_chat_subscribers(chat_id):
     chat = await bot.get_chat(chat_id)
     count = await bot.get_chat_member_count(chat_id)
-    return f"\nИмя канала: {chat.title}\nID: {chat_id}\nКоличество пописчиков: {count}\n"
+    return f"{chat_id} {count}\n{chat.title}\n"
 
 
-@router.message(Command("subscribers"))
+@router.message(Command("list_channels"))
 async def get_subscribers(msg: Message):
-    text = "Количество подписчиков в каналах: \n"
+    text = ""
     for chat_id in config.CHANELLS_ID:
         try:
             text += await get_chat_subscribers(chat_id)
+            text += await PR.get_admins(chat_id)
+            text += "\n"
+            answer_len = len(text)
+            if answer_len >= 3500 and config.CHANELLS_ID[-1] != chat_id:
+                await msg.answer(text)
+                text = ""
         except TelegramBadRequest as e:
             text += f"{chat_id} - не удалось получить, проверьте есть ли бот в канале\n"
             continue
@@ -98,57 +106,9 @@ async def get_subscribers(msg: Message):
         except TelegramRetryAfter as e:
             sleep(e.retry_after)
             text += await get_chat_subscribers(chat_id)
-    await msg.answer(text)
-
-
-@router.message(Command("list_admins"))
-async def get_list_admins(msg: Message):
-    text = "Админстраторы в каналах: \n"
-    answer_len = len(text)
-    for chat_id in config.CHANELLS_ID:
-        try:
-            if answer_len >= 3600 and config.CHANELLS_ID[-1] != chat_id:
-                await msg.answer(text)
-                text = "Админстраторы в каналах: \n"
-                answer_len = len(text)
-            chat = await bot.get_chat(chat_id)
-            text += f"\n{chat.title}\n{chat_id}\n"
-            answer_len += len(text)
-            text += await PR.get_admins(chat_id)
-        except TelegramBadRequest as e:
-            text += f"{chat_id} - не удалось получить, проверьте есть ли бот в канале\n"
-            continue
-        except TelegramForbiddenError as e:
-            text += f"{chat_id} - не удалось получить, скорее всего бот был кикнут из канала\n"
-            continue
-        except TelegramRetryAfter as e:
-            sleep(e.retry_after)
             text += await PR.get_admins(chat_id)
     await msg.answer(text)
 
-@router.message(Command("list_bots"))
-async def get_list_admins(msg: Message):
-    text = "Боты в каналах: \n"
-    answer_len = len(text)
-    for chat_id in config.CHANELLS_ID:
-        try:
-            if answer_len >= 3600 and config.CHANELLS_ID[-1] != chat_id:
-                await msg.answer(text)
-                text = "Боты в каналах: \n"
-                answer_len = len(text)
-            chat = await bot.get_chat(chat_id)
-            text += f"\n{chat.title}\n{chat_id}\n"
-            text += await PR.get_bots(chat_id)
-        except TelegramBadRequest as e:
-            text += f"{chat_id} - не удалось получить, проверьте есть ли бот в канале\n"
-            continue
-        except TelegramForbiddenError as e:
-            text += f"{chat_id} - не удалось получить, скорее всего бот был кикнут из канала\n"
-            continue
-        except TelegramRetryAfter as e:
-            sleep(e.retry_after)
-            text += await PR.get_bots(chat_id)
-    await msg.answer(text)
 
 #Перезапуск бота
 @router.message(Command("restart"))
@@ -205,29 +165,47 @@ async def send_now(callback_query: types.CallbackQuery, state: FSMContext):
     await callback_query.message.answer("Сообщение отправлено")
 
 @router.callback_query(SendMessage.when, lambda c: c.data == 'schedule_send')
-async def schedule_send(callback_query: types.CallbackQuery, state: FSMContext):
+async def schedule_date(callback_query: types.CallbackQuery, state: FSMContext):
     await state.update_data(when=callback_query.data)
-    await state.set_state(SendMessage.schedule)
-    await callback_query.message.answer("Введите дату и время в формате YYYY-MM-DD HH:MM")
+    await state.set_state(SendMessage.schedule_date)
+    await callback_query.message.answer(
+        "Выберете дату: ",
+        reply_markup=await SimpleCalendar().start_calendar())
 
-@router.message(SendMessage.schedule)
-async def set_date(message: types.Message, state: FSMContext):
-    try: 
-        date = datetime.strptime(message.text, '%Y-%m-%d %H:%M')
-    except ValueError:
-        await message.answer("Неверный формат даты")
+@router.callback_query(SendMessage.schedule_date, SimpleCalendarCallback.filter())
+async def process_simple_calendar(callback_query: types.CallbackQuery, callback_data: CallbackData, state: FSMContext):
+    calendar = SimpleCalendar(show_alerts=True)
+    calendar.set_dates_range(datetime.today() - timedelta(days=1), datetime(2025, 12, 31))
+    selected, date = await calendar.process_selection(callback_query, callback_data)
+    if selected:
+        await state.update_data(schedule_date=date)
+        builder = InlineKeyboardBuilder()
+        for i in range(0, 24):
+            button = types.InlineKeyboardButton(text=str(i) , callback_data=str(i))
+            builder.add(button)
+        keyboard = builder.as_markup(resize_keyboard=True),
+        await callback_query.message.answer("Выберете время: ", reply_markup=keyboard[0])
+        await state.set_state(SendMessage.schedule_time)
+
+
+@router.callback_query(SendMessage.schedule_time)
+async def schedule_time(callback_query: types.CallbackQuery, state: FSMContext):
+    time = datetime.strptime(f"{callback_query.data}:00", '%H:%M')
+    time_delta = timedelta(hours=time.hour, minutes=time.minute)
+    text = await state.get_data()
+    selected_date = text['schedule_date'] + time_delta
+    if selected_date < datetime.now():
+        await callback_query.message.answer("Данное время уже прошло")
         return
-    if datetime.now() < date:
-        await state.update_data(schedule=message.text)
-        text = await state.get_data()
-        image_id = await get_vaule('image_id', text)
-        sticker_id = await get_vaule('sticker_id', text)
-        post_text = await get_vaule('post_text', text)
-        await add_task(date, post_text, image_id, sticker_id)
-        await message.answer(f"Сообщение запланировано на {date}")
-        await state.clear()
-    else:
-        await message.answer("Данная дата уже прошла")
+    await state.update_data(schedule_time=callback_query.data)
+    image_id = await get_vaule('image_id', text)
+    sticker_id = await get_vaule('sticker_id', text)
+    post_text = await get_vaule('post_text', text)
+    await add_task(selected_date, post_text, image_id, sticker_id)
+    await callback_query.message.answer(f"Сообщение запланировано на {selected_date}")
+    await state.clear()
+
+        
     
     
 #обработка цепочки add_admin
