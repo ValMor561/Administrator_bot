@@ -67,8 +67,6 @@ async def check_user_id(msg: Message):
 #Запуск бота и вход в режим бесконечного цикла
 @router.message(Command("start"))
 async def cmd_start(msg: Message):
-    global RUNNING
-    RUNNING = True
     #Добавление кнопок
     builder = ReplyKeyboardBuilder()
     builder.row(types.KeyboardButton(text='/add_admin', callback_data='add_admin'), types.KeyboardButton(text='/delete_admin', callback_data='delete_admin'))
@@ -220,21 +218,28 @@ async def get_admins_id(message: types.Message, state: FSMContext):
     get_id = message.text.replace(" ", "").split(',')
     await state.update_data(admins_id=get_id)
     for id in get_id:
+        add_to = ""
         for chat_id in config.CHANELLS_ID:
             try:
                 await bot.promote_chat_member(chat_id, id, 
-                                            can_manage_chat=True, can_post_messages=True,
-                                            can_change_info=True, can_delete_messages=True, 
-                                            can_invite_users=True, can_restrict_members=True,
-                                            can_pin_messages=True, can_promote_members=False)
+                                            is_anonymous=config.IS_ANON, can_manage_chat=config.MANAGE_CHAT, can_delete_messages=config.DELETE_MESSAGE,
+                                            can_manage_video_chats=config.MANAGE_VIDEO, can_restrict_members=config.RESTRICT_MEMBERS, can_promote_members=config.PROMOTE_MEMBERS,
+                                            can_change_info=config.CHANGE_INFO, can_invite_users=config.INVITE_USERS, can_post_stories=config.POST_STORIES,
+                                            can_edit_stories=config.EDIT_STORIES, can_delete_stories=config.DELETE_STORIES, can_post_messages=config.POST_MESSAGES,
+                                            can_edit_messages=config.EDIT_MESSAGES, can_pin_messages=config.PIN_MESSAGES, can_manage_topics=config.MANAGE_TOPIC)
+                add_to += f"{chat_id}, "
             except TelegramBadRequest as e:
-                if 'CHAT_ADMIN_INVITE_REQUIRED' in e.message:
+                if 'CHAT_ADMIN_INVITE_REQUIRED' in e.message or 'user not found' in e.message:
                     await message.answer(f"Пользователя нет в канале:\nchat_id: {chat_id} admin_id: {id}")
+                    continue
                 await message.answer(f"Недостаточно прав:\nchat_id: {chat_id} admin_id: {id}")
                 continue
             except TelegramForbiddenError as e:
                 continue
-    await message.answer("Админы добавлены")
+        if add_to != "":
+            await message.answer(f"Админ {id} добавлен в чаты: {add_to}")
+        else:
+            await message.answer(f"Не удалось добавить админа из чатов")
     await state.clear()
 
 #обработка цепочки delete_admin
@@ -248,19 +253,26 @@ async def get_admins_id(message: types.Message, state: FSMContext):
     get_id = message.text.replace(" ", "").split(',')
     await state.update_data(admins_id=get_id)
     for id in get_id:
+        del_from = ""
         for chat_id in config.CHANELLS_ID:
             try:
                 await bot.promote_chat_member(chat_id, id,
-                                            can_manage_chat=False, can_post_messages=False,
-                                            can_change_info=False, can_delete_messages=False, 
-                                            can_invite_users=False, can_restrict_members=False,
-                                            can_pin_messages=False, can_promote_members=False)
+                                            is_anonymous=False, can_manage_chat=False, can_delete_messages=False,
+                                            can_manage_video_chats=False, can_restrict_members=False, can_promote_members=False,
+                                            can_change_info=False, can_invite_users=False, can_post_stories=False,
+                                            can_edit_stories=False, can_delete_stories=False, can_post_messages=False,
+                                            can_edit_messages=False, can_pin_messages=False, can_manage_topics=False)
+                del_from += f"{chat_id}, "
             except TelegramBadRequest as e:
-                if 'CHAT_ADMIN_INVITE_REQUIRED' in e.message:
+                if 'CHAT_ADMIN_INVITE_REQUIRED' in e.message or 'user not found' in e.message:
                     await message.answer(f"Пользователя нет в канале:\nchat_id: {chat_id} admin_id: {id}")
+                    continue
                 await message.answer(f"Недостаточно прав:\nchat_id: {chat_id} admin_id: {id}")
                 continue
             except TelegramForbiddenError as e:
                 continue
-    await message.answer("Админы удалены")
+        if del_from != "":
+            await message.answer(f"Админ {id} удален из чатов: {del_from}")
+        else:
+            await message.answer(f"Не удалось удалить админа из чатов")
     await state.clear()

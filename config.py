@@ -1,4 +1,5 @@
 import configparser
+from distutils.util import strtobool
 
 #Чтение конфигурационного файла
 def get_config(filename):
@@ -30,3 +31,18 @@ DATABASE=config['BD']['database']
 USER=config['BD']['user']
 PASSWORD=config['BD']['password']
 TABLENAME=config['BD']['tablename']
+IS_ANON = strtobool(config['PRIVILEGES']['is_anonymous'])
+MANAGE_CHAT= strtobool(config['PRIVILEGES']['can_manage_chat'])
+DELETE_MESSAGE = strtobool(config['PRIVILEGES']['can_delete_messages'])
+MANAGE_VIDEO = strtobool(config['PRIVILEGES']['can_manage_video_chats'])
+RESTRICT_MEMBERS = strtobool(config['PRIVILEGES']['can_restrict_members'])
+PROMOTE_MEMBERS = strtobool(config['PRIVILEGES']['can_promote_members'])
+CHANGE_INFO = strtobool(config['PRIVILEGES']['can_change_info'])
+INVITE_USERS = strtobool(config['PRIVILEGES']['can_invite_users'])
+POST_STORIES = strtobool(config['PRIVILEGES']['can_post_stories'])
+EDIT_STORIES = strtobool(config['PRIVILEGES']['can_edit_stories'])
+DELETE_STORIES = strtobool(config['PRIVILEGES']['can_delete_stories'])
+POST_MESSAGES = strtobool(config['PRIVILEGES']['can_post_messages'])
+EDIT_MESSAGES = strtobool(config['PRIVILEGES']['can_edit_messages'])
+PIN_MESSAGES = strtobool(config['PRIVILEGES']['can_pin_messages'])
+MANAGE_TOPIC = strtobool(config['PRIVILEGES']['can_manage_topics'])
