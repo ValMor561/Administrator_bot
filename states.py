@@ -7,6 +7,7 @@ class SendMessage(StatesGroup):
     when = State()
     schedule_date = State()
     schedule_time = State()
+    schedule_minute = State()
 
 class AddAdmin(StatesGroup):
     admins_id = State()

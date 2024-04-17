@@ -26,17 +26,20 @@ BD = BDRequests()
 SCHEDULER = AsyncIOScheduler(timezone='Europe/Moscow')
 SCHEDULER.start()
 
-PR = PyroGRAMM()
+#PR = PyroGRAMM()
 
 async def restore_tasks():
     BD.delete_old()
     all_tasks = BD.select_all()
     for task in all_tasks:
-        SCHEDULER.add_job(send_post, trigger='date', kwargs={'text' : task[2], 'image_id' : task[3], 'sticker_id' : task[4]}, next_run_time=task[1])
+        job_id = SCHEDULER.add_job(send_post, trigger='date', kwargs={'text' : task[2], 'image_id' : task[3], 'sticker_id' : task[4]}, next_run_time=task[1]).id
+        BD.update_job_id(task[0], job_id)
+
 
 async def add_task(date, text, image_id, sticker_id):
-    SCHEDULER.add_job(send_post, trigger='date', kwargs={'text' : text, 'image_id' : image_id, 'sticker_id' : sticker_id}, next_run_time=date)
-    BD.insert_task(date, text, image_id, sticker_id)
+    job_id = SCHEDULER.add_job(send_post, trigger='date', kwargs={'text' : text, 'image_id' : image_id, 'sticker_id' : sticker_id}, next_run_time=date).id
+    print(job_id)
+    BD.insert_task(date, text, image_id, sticker_id, job_id)
 
 async def send_post(text, image_id, sticker_id):
     channels_id = config.CHANELLS_ID
@@ -71,10 +74,10 @@ async def cmd_start(msg: Message):
     builder = ReplyKeyboardBuilder()
     builder.row(types.KeyboardButton(text='/add_admin', callback_data='add_admin'), types.KeyboardButton(text='/delete_admin', callback_data='delete_admin'))
     builder.row(types.KeyboardButton(text='/list_channels', callback_data='list_channels'), types.KeyboardButton(text='/restart', callback_data='restart'))
-    builder.row(types.KeyboardButton(text='/post', callback_data='post'))
+    builder.row(types.KeyboardButton(text='/post', callback_data='post'), types.KeyboardButton(text='/schedule', callback_data='schedule'))
 
     keyboard = builder.as_markup(resize_keyboard=True)
-    await msg.answer("Бот запущен\nКоманды:\n/add_admin - Добавление админов в каналы\n/delete_admin - Удаление админов из каналов\n/list_channels - Информация о каналах\n/post - Отправка постов в каналы\n/restart - Перезапуск всего бота\n", reply_markup=keyboard)
+    await msg.answer("Бот запущен\nКоманды:\n/add_admin - Добавление админов в каналы\n/delete_admin - Удаление админов из каналов\n/list_channels - Информация о каналах\n/post - Отправка постов в каналы\n/schedule - Все запланированые сообщения\n/restart - Перезапуск всего бота\n", reply_markup=keyboard)
 
 
 async def get_chat_subscribers(chat_id):
@@ -115,6 +118,35 @@ async def restart(msg: Message):
     python = sys.executable
     os.execl(python, python, *sys.argv)
 
+@router.message(Command("schedule"))
+async def schedule(msg: Message):
+    posts = BD.select_all()
+    for post in posts:
+        builder = InlineKeyboardBuilder()
+        if post[3] != 'false':
+            button = types.InlineKeyboardButton(text="Удалить" , callback_data=f"ID:{post[0]}")
+            builder.add(button)
+            keyboard = builder.as_markup(resize_keyboard=True)
+            await msg.answer_photo(post[3], caption=f"Дата: {post[1]}\n{post[2]}", parse_mode='html', reply_markup=keyboard)
+        elif post[4] != 'false':
+            button = types.InlineKeyboardButton(text="Удалить" , callback_data=f"ID:{post[0]}")
+            builder.add(button)
+            keyboard = builder.as_markup(resize_keyboard=True)
+            await msg.answer_sticker(post[4])
+            await msg.answer(f"Дата: {post[1]}\n", parse_mode='html', reply_markup=keyboard)
+        else:
+            button = types.InlineKeyboardButton(text="Удалить" , callback_data=f"ID:{post[0]}")
+            builder.add(button)
+            keyboard = builder.as_markup(resize_keyboard=True)
+            await msg.answer(f"Дата: {post[1]}\n{post[2]}", parse_mode='html', reply_markup=keyboard)
+
+@router.callback_query(lambda c: "ID" in c.data)
+async def delet_task(callback_query: types.CallbackQuery):
+    id = callback_query.data.split(":")[1]
+    job_id = BD.select_by_id(id)[0]
+    SCHEDULER.remove_job(job_id)
+    BD.delete_by_id(id)
+    await callback_query.message.answer(f"Задача удалена")
 
 #Цепочка post
 @router.message(Command('post'))
@@ -181,16 +213,31 @@ async def process_simple_calendar(callback_query: types.CallbackQuery, callback_
         for i in range(0, 24):
             button = types.InlineKeyboardButton(text=str(i) , callback_data=str(i))
             builder.add(button)
-        keyboard = builder.as_markup(resize_keyboard=True),
-        await callback_query.message.answer("Выберете время: ", reply_markup=keyboard[0])
+        keyboard = builder.as_markup(resize_keyboard=True)
+        await callback_query.message.answer("Выберете время: ", reply_markup=keyboard)
         await state.set_state(SendMessage.schedule_time)
-
 
 @router.callback_query(SendMessage.schedule_time)
 async def schedule_time(callback_query: types.CallbackQuery, state: FSMContext):
-    time = datetime.strptime(f"{callback_query.data}:00", '%H:%M')
-    time_delta = timedelta(hours=time.hour, minutes=time.minute)
+    if int(callback_query.data) < datetime.now().hour:
+        await callback_query.message.answer("Данное время уже прошло")
+        return
+    builder = InlineKeyboardBuilder()
+    for i in range(0, 60):
+        button = types.InlineKeyboardButton(text=str(i) , callback_data=str(i))
+        builder.add(button)
+    keyboard = builder.as_markup(resize_keyboard=True)
+    await state.update_data(schedule_time=callback_query.data)
+    await callback_query.message.answer(f"Выберете время", reply_markup=keyboard)
+    await state.set_state(SendMessage.schedule_minute)
+
+
+@router.callback_query(SendMessage.schedule_minute)
+async def schedule_minute(callback_query: types.CallbackQuery, state: FSMContext):
     text = await state.get_data()
+    time = datetime.strptime(f"{text['schedule_time']}:{callback_query.data}", '%H:%M')
+    time_delta = timedelta(hours=time.hour, minutes=time.minute)
+    
     selected_date = text['schedule_date'] + time_delta
     if selected_date < datetime.now():
         await callback_query.message.answer("Данное время уже прошло")

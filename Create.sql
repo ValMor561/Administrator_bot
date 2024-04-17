@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public."Scheduler"
 	text_post text,
     image_id text,
     sticker_id text,
+    job_id text,
     CONSTRAINT "Scheduler_pkey" PRIMARY KEY (id)
 )
 
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS public."TestAdmin"
 	text_post text,
     image_id text,
     sticker_id text,
+    job_id text,
     CONSTRAINT "TestAdmin" PRIMARY KEY (id)
 )
 

@@ -18,10 +18,16 @@ class BDRequests():
     def __del__(self):
         self.connection.close()
 
-    def insert_task(self, date, text, image_id, sticker_id):
+    def insert_task(self, date, text, image_id, sticker_id, job_id):
         cursor = self.connection.cursor()
-        insert_query = f'INSERT INTO public."{config.TABLENAME}" (date_post, text_post, image_id, sticker_id) VALUES (%s, %s, %s, %s);'
-        cursor.execute(insert_query, (date, text, image_id, sticker_id))
+        insert_query = f'INSERT INTO public."{config.TABLENAME}" (date_post, text_post, image_id, sticker_id, job_id) VALUES (%s, %s, %s, %s, %s);'
+        cursor.execute(insert_query, (date, text, image_id, sticker_id, job_id))
+        self.connection.commit()
+
+    def update_job_id(self, id, job_id):
+        cursor = self.connection.cursor()
+        update_query = f'UPDATE public."{config.TABLENAME}" SET job_id = %s WHERE id = %s;'
+        cursor.execute(update_query, (job_id, id))
         self.connection.commit()
 
     def delete_old(self):
@@ -29,6 +35,18 @@ class BDRequests():
         delete_query = f'DELETE FROM public."{config.TABLENAME}" WHERE date_post < %s;'
         cursor.execute(delete_query, (datetime.now(), ))
         self.connection.commit()
+
+    def delete_by_id(self, id):
+        cursor = self.connection.cursor()
+        delete_query = f'DELETE FROM public."{config.TABLENAME}" WHERE id = %s;'
+        cursor.execute(delete_query, (id, ))
+        self.connection.commit()
+
+    def select_by_id(self, id):
+        cursor = self.connection.cursor()
+        cursor.execute(f'SELECT job_id FROM public."{config.TABLENAME}" WHERE id = %s;', (id,))
+        result = cursor.fetchall()[0]
+        return result
 
     def select_all(self):
         cursor = self.connection.cursor()
