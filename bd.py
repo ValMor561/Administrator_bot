@@ -44,12 +44,12 @@ class BDRequests():
 
     def select_by_id(self, id):
         cursor = self.connection.cursor()
-        cursor.execute(f'SELECT job_id FROM public."{config.TABLENAME}" WHERE id = %s;', (id,))
+        cursor.execute(f'SELECT date_post, job_id FROM public."{config.TABLENAME}" WHERE id = %s;', (id,))
         result = cursor.fetchall()[0]
         return result
 
     def select_all(self):
         cursor = self.connection.cursor()
-        cursor.execute(f'SELECT * FROM public."{config.TABLENAME}"')
+        cursor.execute(f'SELECT * FROM public."{config.TABLENAME}" ORDER BY date_post')
         result = cursor.fetchall()
         return result

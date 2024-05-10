@@ -26,7 +26,11 @@ BD = BDRequests()
 SCHEDULER = AsyncIOScheduler(timezone='Europe/Moscow')
 SCHEDULER.start()
 
-#PR = PyroGRAMM()
+PR = PyroGRAMM()
+
+def delete_second(date):
+    date = date.strftime('%Y-%m-%d %H:%M')
+    return date
 
 async def restore_tasks():
     BD.delete_old()
@@ -38,7 +42,6 @@ async def restore_tasks():
 
 async def add_task(date, text, image_id, sticker_id):
     job_id = SCHEDULER.add_job(send_post, trigger='date', kwargs={'text' : text, 'image_id' : image_id, 'sticker_id' : sticker_id}, next_run_time=date).id
-    print(job_id)
     BD.insert_task(date, text, image_id, sticker_id, job_id)
 
 async def send_post(text, image_id, sticker_id):
@@ -62,10 +65,29 @@ async def send_post(text, image_id, sticker_id):
 
 
 #Ограничение доступа пользователям, которых нет в списке
-@router.message(lambda message:str(message.from_user.id) not in config.ADMINS)
+@router.message(lambda message:str(message.from_user.id) not in config.ADMINS, F.chat.type == 'private')
 async def check_user_id(msg: Message):
     await msg.answer("Нет доступа")
     return
+
+@router.message(F.forward_from_chat)
+async def check_user_id(msg: Message):
+    if config.UNPIN_TEXT != 'off':
+        for pattern in config.UNPIN_TEXT:
+            if pattern in msg.md_text:
+                return
+    if config.UNPIN_TIME != 'off':
+        if msg.date < config.UNPIN_TIME:
+            return
+    await unpin_message(msg.chat.id, msg.message_id)
+    
+async def unpin_message(chat_id, message_id):
+    try:
+        await bot.unpin_chat_message(chat_id, message_id)
+    except TelegramBadRequest as e:
+        print(e)
+        print('\n', chat_id)
+        return
 
 #Запуск бота и вход в режим бесконечного цикла
 @router.message(Command("start"))
@@ -83,7 +105,7 @@ async def cmd_start(msg: Message):
 async def get_chat_subscribers(chat_id):
     chat = await bot.get_chat(chat_id)
     count = await bot.get_chat_member_count(chat_id)
-    return f"{chat_id} {count}\n{chat.title}\n"
+    return f"{chat_id} : {count}\n{chat.title}\n"
 
 
 @router.message(Command("list_channels"))
@@ -121,32 +143,36 @@ async def restart(msg: Message):
 @router.message(Command("schedule"))
 async def schedule(msg: Message):
     posts = BD.select_all()
+    if len(posts) == 0:
+        await msg.answer("Задачи не запланированы")
     for post in posts:
         builder = InlineKeyboardBuilder()
         if post[3] != 'false':
             button = types.InlineKeyboardButton(text="Удалить" , callback_data=f"ID:{post[0]}")
             builder.add(button)
             keyboard = builder.as_markup(resize_keyboard=True)
-            await msg.answer_photo(post[3], caption=f"Дата: {post[1]}\n{post[2]}", parse_mode='html', reply_markup=keyboard)
+            await msg.answer_photo(post[3], caption=f"Дата: {delete_second(post[1])}\n{post[2]}", parse_mode='html', reply_markup=keyboard)
         elif post[4] != 'false':
             button = types.InlineKeyboardButton(text="Удалить" , callback_data=f"ID:{post[0]}")
             builder.add(button)
             keyboard = builder.as_markup(resize_keyboard=True)
             await msg.answer_sticker(post[4])
-            await msg.answer(f"Дата: {post[1]}\n", parse_mode='html', reply_markup=keyboard)
+            await msg.answer(f"Дата: {delete_second(post[1])}\n", parse_mode='html', reply_markup=keyboard)
         else:
             button = types.InlineKeyboardButton(text="Удалить" , callback_data=f"ID:{post[0]}")
             builder.add(button)
             keyboard = builder.as_markup(resize_keyboard=True)
-            await msg.answer(f"Дата: {post[1]}\n{post[2]}", parse_mode='html', reply_markup=keyboard)
+            await msg.answer(f"Дата: {delete_second(post[1])}\n{post[2]}", parse_mode='html', reply_markup=keyboard)
 
 @router.callback_query(lambda c: "ID" in c.data)
 async def delet_task(callback_query: types.CallbackQuery):
     id = callback_query.data.split(":")[1]
-    job_id = BD.select_by_id(id)[0]
+    task = BD.select_by_id(id)
+    date = task[0]
+    job_id = task[1]
     SCHEDULER.remove_job(job_id)
     BD.delete_by_id(id)
-    await callback_query.message.answer(f"Задача удалена")
+    await callback_query.message.answer(f"Задача удалена Дата: {delete_second(date)}")
 
 #Цепочка post
 @router.message(Command('post'))
@@ -219,7 +245,8 @@ async def process_simple_calendar(callback_query: types.CallbackQuery, callback_
 
 @router.callback_query(SendMessage.schedule_time)
 async def schedule_time(callback_query: types.CallbackQuery, state: FSMContext):
-    if int(callback_query.data) < datetime.now().hour:
+    text = await state.get_data()
+    if int(callback_query.data) < datetime.now().hour and text['schedule_date'].day == datetime.now().day:
         await callback_query.message.answer("Данное время уже прошло")
         return
     builder = InlineKeyboardBuilder()
@@ -247,11 +274,9 @@ async def schedule_minute(callback_query: types.CallbackQuery, state: FSMContext
     sticker_id = await get_vaule('sticker_id', text)
     post_text = await get_vaule('post_text', text)
     await add_task(selected_date, post_text, image_id, sticker_id)
-    await callback_query.message.answer(f"Сообщение запланировано на {selected_date}")
+    await callback_query.message.answer(f"Сообщение запланировано на {delete_second(selected_date)}")
     await state.clear()
 
-        
-    
     
 #обработка цепочки add_admin
 @router.message(Command('add_admin'))

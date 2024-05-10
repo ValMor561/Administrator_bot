@@ -1,5 +1,7 @@
 import configparser
 from distutils.util import strtobool
+from datetime import datetime, timezone
+
 
 #Чтение конфигурационного файла
 def get_config(filename):
@@ -46,3 +48,5 @@ POST_MESSAGES = strtobool(config['PRIVILEGES']['can_post_messages'])
 EDIT_MESSAGES = strtobool(config['PRIVILEGES']['can_edit_messages'])
 PIN_MESSAGES = strtobool(config['PRIVILEGES']['can_pin_messages'])
 MANAGE_TOPIC = strtobool(config['PRIVILEGES']['can_manage_topics'])
+UNPIN_TIME =  datetime.strptime(config['SETTINGS']['unpin_time'], '%Y.%m.%d %H:%M').astimezone(timezone.utc)
+UNPIN_TEXT = get_multiple_values(config['SETTINGS']['unpin_text'])
