@@ -95,18 +95,45 @@ async def cmd_start(msg: Message):
     #Добавление кнопок
     builder = ReplyKeyboardBuilder()
     builder.row(types.KeyboardButton(text='/add_admin', callback_data='add_admin'), types.KeyboardButton(text='/delete_admin', callback_data='delete_admin'))
-    builder.row(types.KeyboardButton(text='/list_channels', callback_data='list_channels'), types.KeyboardButton(text='/restart', callback_data='restart'))
+    builder.row(types.KeyboardButton(text='/list_channels', callback_data='list_channels'), types.KeyboardButton(text='/subscribers', callback_data='subscribers'))
     builder.row(types.KeyboardButton(text='/post', callback_data='post'), types.KeyboardButton(text='/schedule', callback_data='schedule'))
+    builder.row(types.KeyboardButton(text='/restart', callback_data='restart'))
 
     keyboard = builder.as_markup(resize_keyboard=True)
-    await msg.answer("Бот запущен\nКоманды:\n/add_admin - Добавление админов в каналы\n/delete_admin - Удаление админов из каналов\n/list_channels - Информация о каналах\n/post - Отправка постов в каналы\n/schedule - Все запланированые сообщения\n/restart - Перезапуск всего бота\n", reply_markup=keyboard)
-
+    await msg.answer("Бот запущен\nКоманды:\n/add_admin - Добавление админов в каналы\n/delete_admin - Удаление админов из каналов\n/list_channels - Информация о каналах\n/subscribers - Количество подписчиков в каналах\n/post - Отправка постов в каналы\n/schedule - Все запланированые сообщения\n/restart - Перезапуск всего бота\n", reply_markup=keyboard)
 
 async def get_chat_subscribers(chat_id):
     chat = await bot.get_chat(chat_id)
     count = await bot.get_chat_member_count(chat_id)
-    return f"{chat_id} : {count}\n{chat.title}\n"
+    return f"{chat.title} : {chat_id} : {count}\n"
 
+
+@router.message(Command("subscribers"))
+async def get_subscribers(msg: Message):
+    text = ""
+    for chat_id in config.CHANELLS_ID:
+        try:
+            text += await get_chat_subscribers(chat_id)
+            text += "\n"
+            answer_len = len(text)
+            if answer_len >= 3500 and config.CHANELLS_ID[-1] != chat_id:
+                await msg.answer(text)
+                text = ""
+        except TelegramBadRequest as e:
+            text += f"{chat_id} - не удалось получить, проверьте есть ли бот в канале\n"
+            continue
+        except TelegramForbiddenError as e:
+            text += f"{chat_id} - не удалось получить, скорее всего бот был кикнут из канала\n"
+            continue
+        except TelegramRetryAfter as e:
+            sleep(e.retry_after)
+            text += await get_chat_subscribers(chat_id)
+    await msg.answer(text)
+
+async def get_chat_info(chat_id):
+    chat = await bot.get_chat(chat_id)
+    count = await bot.get_chat_member_count(chat_id)
+    return f"{chat_id} : {count}\n{chat.title}\n"
 
 @router.message(Command("list_channels"))
 async def get_subscribers(msg: Message):
